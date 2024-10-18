@@ -1,0 +1,28 @@
+version: '3.3'
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+
+  # publisher:
+  #   build:
+  #     context: ./publisher
+  #   container_name: publisher
+  #   depends_on:
+  #     - rabbitmq
+  #   ports:
+  #     - "3000:3000"
+
+  # subscriber:
+  #   build:
+  #     context: ./subscriber
+  #   container_name: subscriber
+  #   depends_on:
+  #     - rabbitmq
+  #   ports:
+  #     - "4000:4000"
+
