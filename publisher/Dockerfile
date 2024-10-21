@@ -1,32 +1,17 @@
-# Use an official Golang image to build the app
-FROM golang:1.19 as builder
-
-# Set the working directory inside the container
+# Build stage
+FROM golang:1.23 as build
 WORKDIR /app
-
-# Copy the go.mod and go.sum files
 COPY go.mod go.sum ./
-
-# Download the dependencies
 RUN go mod download
-
-# Copy the source code
 COPY . .
 
-# Build the application
-RUN go build -o publisher
+# Ensure CGO is disabled for Alpine compatibility
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /go-eth-app
 
-# Use a smaller image to run the app
+# Final stage
 FROM alpine:latest
-
-# Set the working directory inside the container
-WORKDIR /app
-
-# Copy the built binary from the builder stage
-COPY --from=builder /app/publisher .
-
-# Expose the port on which the app will run
+WORKDIR /root/
+COPY --from=build /go-eth-app .
+COPY .env .env
 EXPOSE 3000
-
-# Command to run the executable
-CMD ["./publisher"]
+CMD ["./go-eth-app"]

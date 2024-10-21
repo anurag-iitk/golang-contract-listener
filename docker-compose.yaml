@@ -1,4 +1,9 @@
 version: '3.3'
+
+networks:
+  blockchain:
+    driver: bridge
+    
 services:
   rabbitmq:
     image: rabbitmq:3-management
@@ -7,22 +12,75 @@ services:
       - "5672:5672"
       - "15672:15672"
 
+  publisher:
+    build:
+      context: ./publisher
+    container_name: publisher
+    depends_on:
+      - rabbitmq
+    ports:
+      - "3000:3000"
 
-  # publisher:
-  #   build:
-  #     context: ./publisher
-  #   container_name: publisher
-  #   depends_on:
-  #     - rabbitmq
-  #   ports:
-  #     - "3000:3000"
-
-  # subscriber:
-  #   build:
-  #     context: ./subscriber
-  #   container_name: subscriber
-  #   depends_on:
-  #     - rabbitmq
-  #   ports:
-  #     - "4000:4000"
-
+  subscriber:
+    build:
+      context: ./subscriber
+    container_name: subscriber
+    depends_on:
+      - rabbitmq
+    ports:
+      - "3001:3001"
+  
+  node1:
+    build:
+      context: ./node1
+      dockerfile: Dockerfile
+    container_name: node1
+    ports:
+      - "3002:3002"
+    networks:
+      - blockchain
+    command: ["./go-eth-app"]
+  
+  node2:
+    build:
+      context: ./node2
+      dockerfile: Dockerfile
+    container_name: node2
+    ports:
+      - "3003:3003"
+    networks:
+      - blockchain
+    command: ["./go-eth-app"]
+  
+  node3:
+    build:
+      context: ./node3
+      dockerfile: Dockerfile
+    container_name: node3
+    ports:
+      - "3004:3004"
+    networks:
+      - blockchain
+    command: ["./go-eth-app"]
+  
+  node4:
+    build:
+      context: ./node4
+      dockerfile: Dockerfile
+    container_name: node4
+    ports:
+      - "3005:3005"
+    networks:
+      - blockchain
+    command: ["./go-eth-app"]
+  
+  node5:
+    build:
+      context: ./node5
+      dockerfile: Dockerfile
+    container_name: node5
+    ports:
+      - "3006:3006"
+    networks:
+      - blockchain
+    command: ["./go-eth-app"]

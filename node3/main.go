@@ -17,10 +17,14 @@ func main() {
 	// Create a Fiber app
 	app := fiber.New()
 
+	app.Get("/", func(c *fiber.Ctx) error {
+		return c.SendString("Node-3 is working!")
+	})
+
 	// Define API endpoints
 	app.Post("/approve-proposal", handlers.ApproveProposalHandler)
 	app.Post("/deposit-ether", handlers.DepositEtherHandler)
 
-	// Start the Fiber app on port 3000
-	log.Fatal(app.Listen(":3001"))
+	// Start the Fiber app on port 3004
+	log.Fatal(app.Listen(":3004"))
 }

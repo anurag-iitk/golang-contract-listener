@@ -1,6 +1,6 @@
 module subscriber
 
-go 1.23.2
+go 1.23
 
 require (
 	github.com/andybalholm/brotli v1.0.5 // indirect

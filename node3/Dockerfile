@@ -12,5 +12,6 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /go-eth-app
 FROM alpine:latest
 WORKDIR /root/
 COPY --from=build /go-eth-app .
-EXPOSE 3001
+COPY .env .env
+EXPOSE 3004
 CMD ["./go-eth-app"]

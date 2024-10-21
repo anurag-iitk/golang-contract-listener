@@ -105,5 +105,5 @@ func main() {
 	})
 
 	// Start the Fiber app
-	log.Fatal(app.Listen(":4000"))
+	log.Fatal(app.Listen(":3001"))
 }
