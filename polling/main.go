@@ -5,26 +5,29 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/gofiber/fiber/v2"
 )
 
-// Event structures based on the ABI
-type InitializedEvent struct {
-	Version uint64
+type EventResponse struct {
+	BlockNumber uint64 `json:"block_number"`
+	TxHash      string `json:"tx_hash"`
+	EventName   string `json:"event_name"`
+	Details     string `json:"details"`
 }
 
-type ThresholdSetEvent struct {
-	Threshold *big.Int
-}
+var eventLog []EventResponse // Holds a log of detected events
 
-// ABI of the smart contract (replace with your actual contract ABI)
-const contractABI = `[
+// ABI definitions
+const InitializerABI = `[
     {
       "inputs": [],
       "name": "InvalidInitialization",
@@ -76,47 +79,248 @@ const contractABI = `[
     }
   ]`
 
-// Contract address (replace with your actual contract address)
-const contractAddress = "0x03b67bE2c5c0CCC16Cb45aa6529111b9fcDaE446"
+const approvalABI = `[
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "approver",
+          "type": "address"
+        }
+      ],
+      "name": "ApproverAdded",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "approver",
+          "type": "address"
+        }
+      ],
+      "name": "ApproverDeleted",
+      "type": "event"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_approver",
+          "type": "address"
+        }
+      ],
+      "name": "addApprover",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_approver",
+          "type": "address"
+        }
+      ],
+      "name": "deleteApprover",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_approver",
+          "type": "address"
+        }
+      ],
+      "name": "getApprover",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ]`
 
-// Ethereum node RPC URL (replace with your Infura or Geth RPC endpoint)
-const rpcURL = "ws://127.0.0.1:8545"
+const proposalABI = `[
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "sender",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        }
+      ],
+      "name": "DepositedEther",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "recipient",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        }
+      ],
+      "name": "ProposalAdded",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "proposalId",
+          "type": "uint256"
+        }
+      ],
+      "name": "ProposalApproved",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "_proposalId",
+          "type": "uint256"
+        }
+      ],
+      "name": "ProposalExecuted",
+      "type": "event"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_proposalId",
+          "type": "uint256"
+        }
+      ],
+      "name": "approveProposal",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address payable",
+          "name": "_recipient",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_amount",
+          "type": "uint256"
+        }
+      ],
+      "name": "createProposal",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "depositEther",
+      "outputs": [],
+      "stateMutability": "payable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_proposalId",
+          "type": "uint256"
+        }
+      ],
+      "name": "getProposal",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "proposalId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "recipient",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "approvals",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bool",
+          "name": "executed",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ]`
 
-func main() {
-	// Connect to Ethereum client
-	client, err := ethclient.Dial(rpcURL)
-	if err != nil {
-		log.Fatalf("Failed to connect to Ethereum client: %v", err)
-	}
-	defer client.Close()
+// Track multiple contracts with their ABIs and addresses
+var contracts = map[string]string{
+	"Initializer": InitializerABI,
+	"Approval":    approvalABI,
+	"Proposal":    proposalABI,
+}
 
-	// Load contract ABI
-	contractAbi, err := abi.JSON(strings.NewReader(contractABI))
-	if err != nil {
-		log.Fatalf("Failed to parse contract ABI: %v", err)
-	}
-
-	// Polling mechanism: checking for new events every 15 seconds
+func pollEvents(client *ethclient.Client, contractAbi abi.ABI, contractAddress string) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
-	// Keep track of the last block to avoid processing the same block repeatedly
 	var lastProcessedBlock uint64
 
 	for range ticker.C {
-		// Get the latest block number
 		blockNumber, err := client.BlockNumber(context.Background())
 		if err != nil {
-			log.Fatalf("Failed to get latest block number: %v", err)
-		}
-
-		// Skip if the block hasn't changed since the last poll
-		if blockNumber == lastProcessedBlock {
-			fmt.Println("No new blocks. Skipping...")
+			log.Printf("Failed to get latest block number: %v", err)
 			continue
 		}
 
-		// Query logs for the smart contract event
+		if blockNumber == lastProcessedBlock {
+			continue
+		}
+
 		query := ethereum.FilterQuery{
 			Addresses: []common.Address{common.HexToAddress(contractAddress)},
 			FromBlock: big.NewInt(int64(lastProcessedBlock + 1)),
@@ -125,34 +329,87 @@ func main() {
 
 		logs, err := client.FilterLogs(context.Background(), query)
 		if err != nil {
-			log.Fatalf("Failed to filter logs: %v", err)
+			log.Printf("Failed to filter logs: %v", err)
+			continue
 		}
 
-		// Process the logs and decode events
 		for _, vLog := range logs {
-			switch vLog.Topics[0].Hex() {
-			case contractAbi.Events["Initialized"].ID.Hex():
-				event := new(InitializedEvent)
-				err := contractAbi.UnpackIntoInterface(event, "Initialized", vLog.Data)
-				if err != nil {
-					log.Fatalf("Failed to unpack Initialized event: %v", err)
-				}
-				fmt.Printf("Initialized Event detected! Version: %d\n", event.Version)
-			case contractAbi.Events["ThresholdSet"].ID.Hex():
-				event := new(ThresholdSetEvent)
-				err := contractAbi.UnpackIntoInterface(event, "ThresholdSet", vLog.Data)
-				if err != nil {
-					log.Fatalf("Failed to unpack ThresholdSet event: %v", err)
-				}
-				fmt.Printf("ThresholdSet Event detected! Threshold: %s\n", event.Threshold.String())
-			default:
-				fmt.Println("Unknown event detected.")
+			eventResponse := EventResponse{
+				BlockNumber: vLog.BlockNumber,
+				TxHash:      vLog.TxHash.Hex(),
 			}
 
-			// Also print the block and transaction details
-			fmt.Printf("Block Number: %d\n", vLog.BlockNumber)
-			fmt.Printf("Tx Hash: %s\n", vLog.TxHash.Hex())
+			// Process each event for the ABI
+			for name, event := range contractAbi.Events {
+				if vLog.Topics[0].Hex() == event.ID.Hex() {
+					eventResponse.EventName = name
+					details, err := processEvent(contractAbi, event, vLog)
+					if err != nil {
+						log.Printf("Failed to process event %s: %v", name, err)
+						continue
+					}
+					eventResponse.Details = details
+					break
+				}
+			}
+
+			if eventResponse.EventName != "" {
+				// Log and store the event only if EventName is populated
+				log.Printf("Event detected: %s, Block: %d, Tx: %s\n", eventResponse.EventName, eventResponse.BlockNumber, eventResponse.TxHash)
+				eventLog = append(eventLog, eventResponse)
+			}
 		}
+
 		lastProcessedBlock = blockNumber
 	}
+}
+
+// processEvent dynamically processes the events based on ABI and log data
+func processEvent(contractAbi abi.ABI, event abi.Event, vLog types.Log) (string, error) {
+	// Create a map to unpack event data into
+	eventData := map[string]interface{}{}
+	err := contractAbi.UnpackIntoMap(eventData, event.Name, vLog.Data)
+	if err != nil {
+		return "", err
+	}
+
+	// Generate a human-readable output for the event
+	var details []string
+	for name, value := range eventData {
+		details = append(details, fmt.Sprintf("%s: %v", name, value))
+	}
+	return strings.Join(details, ", "), nil
+}
+
+func main() {
+	rpcURL := os.Getenv("RPC_URL")
+	contractAddress := os.Getenv("CONTRACT_ADDRESS")
+
+	// Connect to Ethereum client
+	client, err := ethclient.Dial(rpcURL)
+	if err != nil {
+		log.Fatalf("Failed to connect to Ethereum client: %v", err)
+	}
+
+	// Start polling for each contract ABI
+	for contractName, contractABI := range contracts {
+		contractAbi, err := abi.JSON(strings.NewReader(contractABI))
+		if err != nil {
+			log.Fatalf("Failed to parse %s contract ABI: %v", contractName, err)
+		}
+
+		// Start polling for events in a separate goroutine for each contract
+		go pollEvents(client, contractAbi, contractAddress)
+	}
+
+	// Start Fiber server
+	app := fiber.New()
+
+	// Route to check detected events
+	app.Get("/events", func(c *fiber.Ctx) error {
+		return c.JSON(eventLog)
+	})
+
+	// Start the Fiber server on port 4003
+	log.Fatal(app.Listen(":4003"))
 }
