@@ -1,7 +1,7 @@
 version: '3.3'
 
 networks:
-  blockchain:
+  blockchain_network:
     driver: bridge
     
 services:
@@ -11,76 +11,53 @@ services:
     ports:
       - "5672:5672"
       - "15672:15672"
+    networks:
+      - blockchain_network
 
-  publisher:
-    build:
-      context: ./publisher
-    container_name: publisher
+  blockchain:
+    build: ./blockchain
+    container_name: blockchain-service
+    env_file:
+      - .env.blockchain
     depends_on:
       - rabbitmq
     ports:
-      - "3000:3000"
-
-  subscriber:
-    build:
-      context: ./subscriber
-    container_name: subscriber
+      - "4000:4000"
+    networks:
+      - blockchain_network
+  
+  approval-node1:
+    build: ./approval-node
+    container_name: approval-node1
+    env_file:
+      - .env.node1
     depends_on:
       - rabbitmq
-    ports:
-      - "3001:3001"
-  
-  node1:
-    build:
-      context: ./node1
-      dockerfile: Dockerfile
-    container_name: node1
-    ports:
-      - "3002:3002"
-    networks:
       - blockchain
-    command: ["./go-eth-app"]
-  
-  node2:
-    build:
-      context: ./node2
-      dockerfile: Dockerfile
-    container_name: node2
     ports:
-      - "3003:3003"
+      - "4001:4001"
     networks:
+      - blockchain_network
+
+  approval-node2:
+    build: ./approval-node
+    container_name: approval-node2
+    env_file:
+      - .env.node2
+    depends_on:
+      - rabbitmq
       - blockchain
-    command: ["./go-eth-app"]
-  
-  node3:
-    build:
-      context: ./node3
-      dockerfile: Dockerfile
-    container_name: node3
     ports:
-      - "3004:3004"
+      - "4002:4001"
     networks:
-      - blockchain
-    command: ["./go-eth-app"]
+      - blockchain_network
   
-  node4:
-    build:
-      context: ./node4
-      dockerfile: Dockerfile
-    container_name: node4
+  polling:
+    build: ./polling
+    container_name: polling
+    env_file:
+      - .env.polling
     ports:
-      - "3005:3005"
+      - "4003:4003"
     networks:
-      - blockchain
-    command: ["./go-eth-app"]
-  
-  node5:
-    build:
-      context: ./node5
-      dockerfile: Dockerfile
-    container_name: node5
-    ports:
-      - "3006:3006"
-    networks:
-      - blockchain
-    command: ["./go-eth-app"]
+      - blockchain_network
